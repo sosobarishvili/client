@@ -1,4 +1,5 @@
-import MainPage from './pages/mainPage';
+import MainPage from "./pages/TempPage";
+
 
 function App() {
 
