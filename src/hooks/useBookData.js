@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import axios from 'axios';
 import Papa from 'papaparse';
 
@@ -11,29 +11,39 @@ const useBookData = (initialParams) => {
   const [hasMore, setHasMore] = useState(true);
   const [isLoading, setIsLoading] = useState(false);
 
-  const fetchBooks = useCallback(async (isNewSearch = false, paramsArg = params) => {
+  const pageRef = useRef(page);
+  pageRef.current = page;
+
+  // The core logic to fetch a specific page of data.
+  const fetchPage = useCallback(async (pageNumber, isNewSearch = false) => {
     if (isLoading) return;
 
     setIsLoading(true);
-    const currentPage = isNewSearch ? 1 : page;
 
     try {
       const response = await axios.get(API_URL, {
-        params: { ...paramsArg, page: currentPage },
+        params: { ...params, page: pageNumber },
       });
 
       const newBooks = response.data;
       setBooks(prevBooks => (isNewSearch ? newBooks : [...prevBooks, ...newBooks]));
-      setHasMore(newBooks.length > 0);
+
+      const expectedPageSize = pageNumber === 1 ? 20 : 10;
+      setHasMore(newBooks.length === expectedPageSize);
+
       if (!isNewSearch) {
-        setPage(prev => prev + 1);
+        setPage(pageNumber);
       }
     } catch (error) {
       console.error("Failed to fetch books:", error);
     } finally {
       setIsLoading(false);
     }
-  }, [page, isLoading]);
+  }, [isLoading, params]);
+
+  const fetchMoreBooks = useCallback(() => {
+    fetchPage(pageRef.current + 1, false);
+  }, [fetchPage]);
 
   useEffect(() => {
     setPage(1);
@@ -41,11 +51,11 @@ const useBookData = (initialParams) => {
     setHasMore(true);
 
     const handler = setTimeout(() => {
-      fetchBooks(true, params);
+      fetchPage(1, true);
     }, 300);
 
     return () => clearTimeout(handler);
-  }, [params]);
+  }, [params.region, params.seed, params.likes, params.reviews]);
 
   const handleParamChange = (key, value) => {
     setParams(prev => ({ ...prev, [key]: value }));
@@ -58,7 +68,8 @@ const useBookData = (initialParams) => {
       Title: book.title,
       Authors: book.authors,
       Publisher: book.publisher,
-      Likes: book.likes
+      Likes: book.likes,
+      Reviews: book.reviews.length
     }));
 
     const csv = Papa.unparse(dataToExport);
@@ -74,10 +85,11 @@ const useBookData = (initialParams) => {
   return {
     books,
     hasMore,
-    fetchBooks,
+    fetchBooks: fetchMoreBooks,
     exportToCSV,
     handleParamChange,
-    params
+    params,
+    isLoading
   };
 };
 
